@@ -1,0 +1,22 @@
+# cargo-release configuration
+# Install: cargo install cargo-release
+# Usage: cargo release patch --execute
+
+[workspace]
+# Commit message template
+pre-release-commit-message = "chore: Bump version to {{version}}"
+
+# Tag configuration
+tag-message = "Release {{version}}"
+tag-name = "v{{version}}"
+
+# Push after release
+push = true
+push-remote = "origin"
+
+# Don't publish to crates.io (CI handles this)
+publish = false
+
+# Sign commits (disable if no GPG key)
+sign-commit = false
+sign-tag = false
