@@ -124,7 +124,7 @@ pub async fn toc(ids_str: &str, json: bool) -> Result<()> {
     Ok(())
 }
 
-/// Upload a PDF file
+/// Upload a file (PDF or Markdown)
 pub async fn add(file_path: &str) -> Result<()> {
     let path = Path::new(file_path);
 
@@ -133,18 +133,22 @@ pub async fn add(file_path: &str) -> Result<()> {
         return Err(anyhow::anyhow!("File not found: {}", file_path));
     }
 
-    // Validate it's a PDF
+    // Get content type based on extension
     let extension = path
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase());
 
-    if extension.as_deref() != Some("pdf") {
-        return Err(anyhow::anyhow!(
-            "Only PDF files are supported. Got: {}",
-            extension.unwrap_or_else(|| "no extension".to_string())
-        ));
-    }
+    let content_type = match extension.as_deref() {
+        Some("pdf") => "application/pdf",
+        Some("md") | Some("markdown") => "text/markdown",
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Unsupported file type. Only PDF and Markdown files are supported. Got: {}",
+                extension.unwrap_or_else(|| "no extension".to_string())
+            ));
+        }
+    };
 
     // Get file info
     let metadata = std::fs::metadata(path).context("Failed to read file metadata")?;
@@ -165,7 +169,7 @@ pub async fn add(file_path: &str) -> Result<()> {
     io::stdout().flush()?;
 
     let upload_info = client
-        .create_upload(&filename, size, "application/pdf")
+        .create_upload(&filename, size, content_type)
         .await?;
 
     println!(" {}", "OK".green());
@@ -187,7 +191,7 @@ pub async fn add(file_path: &str) -> Result<()> {
 
     // Upload to presigned URL
     client
-        .upload_file(&upload_info.upload_url, file_data.clone(), "application/pdf")
+        .upload_file(&upload_info.upload_url, file_data.clone(), content_type)
         .await?;
 
     pb.set_position(size);
