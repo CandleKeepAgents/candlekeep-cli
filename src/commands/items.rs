@@ -377,3 +377,87 @@ pub async fn flag(id: &str) -> Result<()> {
 
     Ok(())
 }
+
+/// Create a new markdown document
+pub async fn create(
+    title: &str,
+    description: Option<&str>,
+    content: Option<&str>,
+    json: bool,
+) -> Result<()> {
+    let client = ApiClient::new()?;
+    let response = client.create_markdown(title, description, content).await?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&response)?);
+    } else {
+        output::print_success(&format!(
+            "Created: {} (ID: {})",
+            response.title,
+            response.id.cyan()
+        ));
+        println!("  Pages: {}", response.page_count);
+        println!();
+        println!("  To add content: ck items put {} --file content.md", response.id);
+        println!("  To view:        ck items get {}", response.id);
+    }
+
+    Ok(())
+}
+
+/// Get full content of a document (outputs to stdout for piping)
+pub async fn get(id: &str) -> Result<()> {
+    let client = ApiClient::new()?;
+    let response = client.get_content(id).await?;
+
+    // Output raw content to stdout (for piping to files)
+    print!("{}", response.content);
+
+    Ok(())
+}
+
+/// Replace document content from file or stdin
+pub async fn put(id: &str, file_path: Option<&str>) -> Result<()> {
+    let content = if let Some(path) = file_path {
+        // Read from file
+        let path = Path::new(path);
+        if !path.exists() {
+            return Err(anyhow::anyhow!("File not found: {}", path.display()));
+        }
+        std::fs::read_to_string(path).context("Failed to read file")?
+    } else {
+        // Read from stdin
+        let mut buffer = String::new();
+        io::stdin()
+            .read_line(&mut buffer)
+            .context("Failed to read from stdin")?;
+
+        // Keep reading until EOF
+        loop {
+            let mut line = String::new();
+            match io::stdin().read_line(&mut line) {
+                Ok(0) => break, // EOF
+                Ok(_) => buffer.push_str(&line),
+                Err(e) => return Err(anyhow::anyhow!("Failed to read from stdin: {}", e)),
+            }
+        }
+        buffer
+    };
+
+    if content.trim().is_empty() {
+        return Err(anyhow::anyhow!("No content provided"));
+    }
+
+    let client = ApiClient::new()?;
+    let response = client.put_content(id, &content).await?;
+
+    output::print_success(&format!(
+        "Updated: {} (ID: {})",
+        response.title,
+        response.id.cyan()
+    ));
+    println!("  Version: {}", response.version);
+    println!("  Pages: {}", response.page_count);
+
+    Ok(())
+}

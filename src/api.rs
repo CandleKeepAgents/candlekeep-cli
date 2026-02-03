@@ -212,6 +212,47 @@ pub struct FlaggedItem {
     pub needs_enrichment: bool,
 }
 
+// Markdown document types
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateMarkdownResponse {
+    pub id: String,
+    pub title: String,
+    pub description: Option<String>,
+    #[serde(rename = "sourceType")]
+    pub source_type: String,
+    #[serde(rename = "pageCount")]
+    pub page_count: i32,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GetContentResponse {
+    pub id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub content: String,
+    pub version: i32,
+    #[serde(rename = "pageCount")]
+    pub page_count: i32,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PutContentResponse {
+    pub id: String,
+    pub title: String,
+    pub version: i32,
+    #[serde(rename = "pageCount")]
+    pub page_count: i32,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
 /// Request type for reading items with optional per-item page ranges
 #[derive(Debug, Serialize)]
 pub struct ItemReadRequest {
@@ -548,6 +589,91 @@ impl ApiClient {
             .post(self.api_url("/items/flag"))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&Body { item_id })
+            .send()
+            .await
+            .context("Failed to connect to API")?;
+
+        if !response.status().is_success() {
+            return Err(Self::handle_error(response).await);
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse response")
+    }
+
+    /// POST /api/v1/items/markdown - Create a new markdown document
+    pub async fn create_markdown(
+        &self,
+        title: &str,
+        description: Option<&str>,
+        content: Option<&str>,
+    ) -> Result<CreateMarkdownResponse> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            title: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            description: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            content: Option<&'a str>,
+        }
+
+        let response = self
+            .client
+            .post(self.api_url("/items/markdown"))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .json(&Body {
+                title,
+                description,
+                content,
+            })
+            .send()
+            .await
+            .context("Failed to connect to API")?;
+
+        if !response.status().is_success() {
+            return Err(Self::handle_error(response).await);
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse response")
+    }
+
+    /// GET /api/v1/items/:id/content - Get full document content
+    pub async fn get_content(&self, item_id: &str) -> Result<GetContentResponse> {
+        let response = self
+            .client
+            .get(self.api_url(&format!("/items/{}/content", item_id)))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .send()
+            .await
+            .context("Failed to connect to API")?;
+
+        if !response.status().is_success() {
+            return Err(Self::handle_error(response).await);
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse response")
+    }
+
+    /// PUT /api/v1/items/:id/content - Replace document content
+    pub async fn put_content(&self, item_id: &str, content: &str) -> Result<PutContentResponse> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            content: &'a str,
+        }
+
+        let response = self
+            .client
+            .put(self.api_url(&format!("/items/{}/content", item_id)))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .json(&Body { content })
             .send()
             .await
             .context("Failed to connect to API")?;

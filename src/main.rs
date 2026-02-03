@@ -96,6 +96,30 @@ enum ItemsCommands {
         /// Item ID
         id: String,
     },
+    /// Create a new markdown document
+    Create {
+        /// Document title
+        title: String,
+        /// Description
+        #[arg(long, short)]
+        description: Option<String>,
+        /// Initial content
+        #[arg(long, short)]
+        content: Option<String>,
+    },
+    /// Get full content of a document (outputs to stdout)
+    Get {
+        /// Item ID
+        id: String,
+    },
+    /// Replace document content (from file or stdin)
+    Put {
+        /// Item ID
+        id: String,
+        /// Read content from file
+        #[arg(long, short)]
+        file: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -133,6 +157,15 @@ async fn main() -> Result<()> {
                 .await?
             }
             ItemsCommands::Flag { id } => items::flag(&id).await?,
+            ItemsCommands::Create {
+                title,
+                description,
+                content,
+            } => {
+                items::create(&title, description.as_deref(), content.as_deref(), cli.json).await?
+            }
+            ItemsCommands::Get { id } => items::get(&id).await?,
+            ItemsCommands::Put { id, file } => items::put(&id, file.as_deref()).await?,
         },
     }
 
