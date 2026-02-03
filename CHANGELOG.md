@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0] - 2026-02-04
+
+### Added
+- **Markdown Document Support**: Full CRUD operations for markdown documents
+  - `ck items create <title>` - Create new markdown documents with `--content` flag
+  - `ck items get <id>` - Retrieve markdown content for a document
+  - `ck items put <id>` - Update markdown content for existing documents
+- Table of contents extraction now works for both PDF and markdown documents
+- Real-time content versioning with page tracking
+
+### Changed
+- `ck items list` now shows markdown documents alongside PDFs
+- `ck items toc` supports both PDF and markdown documents
+- `ck items read` works with markdown page ranges
+
 ## [0.3.1] - 2026-02-03
 
 ### Added
