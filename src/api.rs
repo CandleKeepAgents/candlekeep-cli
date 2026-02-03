@@ -27,9 +27,19 @@ pub struct WhoamiResponse {
     pub item_count: i32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct EnrichmentQueueItem {
+    pub id: String,
+    pub title: String,
+    #[serde(rename = "pageCount")]
+    pub page_count: i32,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ItemsResponse {
     pub items: Vec<Item>,
+    #[serde(rename = "enrichmentQueue")]
+    pub enrichment_queue: Option<Vec<EnrichmentQueueItem>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -37,8 +47,15 @@ pub struct Item {
     pub id: String,
     pub title: String,
     pub description: Option<String>,
+    pub author: Option<String>,
     #[serde(rename = "sourceType")]
     pub source_type: String,
+    #[serde(rename = "needsEnrichment")]
+    pub needs_enrichment: Option<bool>,
+    #[serde(rename = "enrichmentConfidence")]
+    pub enrichment_confidence: Option<f64>,
+    #[serde(rename = "enrichedAt")]
+    pub enriched_at: Option<String>,
     #[serde(rename = "createdAt")]
     pub created_at: String,
     #[serde(rename = "updatedAt")]
@@ -163,6 +180,38 @@ pub struct ApiError {
     pub error: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct EnrichResponse {
+    pub item: EnrichedItem,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct EnrichedItem {
+    pub id: String,
+    pub title: String,
+    pub author: Option<String>,
+    pub description: Option<String>,
+    #[serde(rename = "needsEnrichment")]
+    pub needs_enrichment: bool,
+    #[serde(rename = "enrichmentConfidence")]
+    pub enrichment_confidence: Option<f64>,
+    #[serde(rename = "enrichedAt")]
+    pub enriched_at: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FlagResponse {
+    pub item: FlaggedItem,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct FlaggedItem {
+    pub id: String,
+    pub title: String,
+    #[serde(rename = "needsEnrichment")]
+    pub needs_enrichment: bool,
+}
+
 /// Request type for reading items with optional per-item page ranges
 #[derive(Debug, Serialize)]
 pub struct ItemReadRequest {
@@ -249,7 +298,7 @@ impl ApiClient {
     }
 
     /// GET /api/v1/items
-    pub async fn list_items(&self) -> Result<Vec<Item>> {
+    pub async fn list_items(&self) -> Result<ItemsResponse> {
         let response = self
             .client
             .get(self.api_url("/items"))
@@ -262,12 +311,10 @@ impl ApiClient {
             return Err(Self::handle_error(response).await);
         }
 
-        let items_response: ItemsResponse = response
+        response
             .json()
             .await
-            .context("Failed to parse response")?;
-
-        Ok(items_response.items)
+            .context("Failed to parse response")
     }
 
     /// POST /api/v1/items/batch - Get multiple items with their pages
@@ -422,6 +469,81 @@ impl ApiClient {
             .delete(self.api_url("/items"))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&Body { ids })
+            .send()
+            .await
+            .context("Failed to connect to API")?;
+
+        if !response.status().is_success() {
+            return Err(Self::handle_error(response).await);
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse response")
+    }
+
+    /// PATCH /api/v1/items/enrich - Enrich item metadata
+    pub async fn enrich_item(
+        &self,
+        item_id: &str,
+        title: Option<&str>,
+        author: Option<&str>,
+        description: Option<&str>,
+        confidence: Option<f64>,
+    ) -> Result<EnrichResponse> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            #[serde(rename = "itemId")]
+            item_id: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            title: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            author: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            description: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            confidence: Option<f64>,
+        }
+
+        let response = self
+            .client
+            .patch(self.api_url("/items/enrich"))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .json(&Body {
+                item_id,
+                title,
+                author,
+                description,
+                confidence,
+            })
+            .send()
+            .await
+            .context("Failed to connect to API")?;
+
+        if !response.status().is_success() {
+            return Err(Self::handle_error(response).await);
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse response")
+    }
+
+    /// POST /api/v1/items/flag - Flag item as needing enrichment
+    pub async fn flag_item(&self, item_id: &str) -> Result<FlagResponse> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            #[serde(rename = "itemId")]
+            item_id: &'a str,
+        }
+
+        let response = self
+            .client
+            .post(self.api_url("/items/flag"))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .json(&Body { item_id })
             .send()
             .await
             .context("Failed to connect to API")?;

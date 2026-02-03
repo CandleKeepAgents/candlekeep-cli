@@ -77,12 +77,12 @@ fn parse_ids_with_ranges(ids_str: &str) -> Result<Vec<ItemReadRequest>> {
 /// List all items
 pub async fn list(json: bool) -> Result<()> {
     let client = ApiClient::new()?;
-    let items = client.list_items().await?;
+    let response = client.list_items().await?;
 
     if json {
-        output::print_items_json(&items);
+        output::print_items_json(&response);
     } else {
-        output::print_items_table(&items);
+        output::print_items_table(&response.items, &response.enrichment_queue);
     }
 
     Ok(())
@@ -276,6 +276,73 @@ pub async fn remove(ids_str: &str, skip_confirm: bool) -> Result<()> {
             ));
         }
     }
+
+    Ok(())
+}
+
+/// Enrich item metadata
+pub async fn enrich(
+    id: &str,
+    title: Option<&str>,
+    author: Option<&str>,
+    description: Option<&str>,
+    confidence: Option<f64>,
+) -> Result<()> {
+    if title.is_none() && author.is_none() && description.is_none() {
+        return Err(anyhow::anyhow!(
+            "At least one of --title, --author, or --description is required"
+        ));
+    }
+
+    if let Some(conf) = confidence {
+        if !(0.0..=1.0).contains(&conf) {
+            return Err(anyhow::anyhow!("Confidence must be between 0.0 and 1.0"));
+        }
+    }
+
+    let client = ApiClient::new()?;
+    let response = client.enrich_item(id, title, author, description, confidence).await?;
+
+    output::print_success(&format!(
+        "Enriched: {} (ID: {})",
+        response.item.title,
+        response.item.id.cyan()
+    ));
+
+    if let Some(author) = &response.item.author {
+        output::print_info(&format!("Author: {}", author));
+    }
+
+    if let Some(desc) = &response.item.description {
+        let preview = if desc.len() > 80 {
+            format!("{}...", &desc[..77])
+        } else {
+            desc.clone()
+        };
+        output::print_info(&format!("Description: {}", preview));
+    }
+
+    if let Some(conf) = response.item.enrichment_confidence {
+        output::print_info(&format!("Confidence: {:.1}%", conf * 100.0));
+    }
+
+    if response.item.needs_enrichment {
+        output::print_warning("Still flagged for enrichment (confidence < 80%)");
+    }
+
+    Ok(())
+}
+
+/// Flag item as needing enrichment
+pub async fn flag(id: &str) -> Result<()> {
+    let client = ApiClient::new()?;
+    let response = client.flag_item(id).await?;
+
+    output::print_success(&format!(
+        "Flagged for enrichment: {} (ID: {})",
+        response.item.title,
+        response.item.id.cyan()
+    ));
 
     Ok(())
 }

@@ -3,7 +3,7 @@
 use colored::Colorize;
 use comfy_table::{presets::UTF8_FULL, Cell, Color, ContentArrangement, Table};
 
-use crate::api::{Item, ItemWithPages, ItemWithToc, TocEntry, WhoamiResponse};
+use crate::api::{EnrichmentQueueItem, Item, ItemsResponse, ItemWithPages, ItemWithToc, TocEntry, WhoamiResponse};
 
 /// Status color mapping
 fn status_color(status: &str) -> Color {
@@ -54,7 +54,7 @@ pub fn print_whoami_json(info: &WhoamiResponse) {
 }
 
 /// Print items as table
-pub fn print_items_table(items: &[Item]) {
+pub fn print_items_table(items: &[Item], enrichment_queue: &Option<Vec<EnrichmentQueueItem>>) {
     if items.is_empty() {
         println!("{}", "No items found.".dimmed());
         return;
@@ -69,6 +69,7 @@ pub fn print_items_table(items: &[Item]) {
             Cell::new("Title").fg(Color::Cyan),
             Cell::new("Pages").fg(Color::Cyan),
             Cell::new("Status").fg(Color::Cyan),
+            Cell::new("Enrich").fg(Color::Cyan),
         ]);
 
     for item in items {
@@ -80,11 +81,20 @@ pub fn print_items_table(items: &[Item]) {
 
         let status_cell = Cell::new(&status).fg(status_color(&status));
 
+        let enrich_status = if item.needs_enrichment.unwrap_or(false) {
+            Cell::new("⚠").fg(Color::Yellow)
+        } else if item.enrichment_confidence.is_some() {
+            Cell::new("✓").fg(Color::Green)
+        } else {
+            Cell::new("-").fg(Color::DarkGrey)
+        };
+
         table.add_row(vec![
             Cell::new(&item.id),
             Cell::new(&item.title),
             Cell::new(item.page_count),
             status_cell,
+            enrich_status,
         ]);
     }
 
@@ -94,11 +104,27 @@ pub fn print_items_table(items: &[Item]) {
         items.len().to_string().bold(),
         if items.len() == 1 { "item" } else { "items" }
     );
+
+    // Print enrichment queue if present
+    if let Some(queue) = enrichment_queue {
+        if !queue.is_empty() {
+            println!();
+            println!("{}", "Enrichment Queue:".yellow().bold());
+            for item in queue {
+                println!(
+                    "  {} {} ({} pages)",
+                    "⚠".yellow(),
+                    item.title.dimmed(),
+                    item.page_count
+                );
+            }
+        }
+    }
 }
 
 /// Print items as JSON
-pub fn print_items_json(items: &[Item]) {
-    println!("{}", serde_json::to_string_pretty(items).unwrap());
+pub fn print_items_json(response: &ItemsResponse) {
+    println!("{}", serde_json::to_string_pretty(response).unwrap());
 }
 
 /// Print item content with page numbers

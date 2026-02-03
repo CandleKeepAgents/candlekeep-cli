@@ -71,6 +71,28 @@ enum ItemsCommands {
         #[arg(long, short)]
         yes: bool,
     },
+    /// Enrich item metadata (title, author, description)
+    Enrich {
+        /// Item ID
+        id: String,
+        /// New title
+        #[arg(long)]
+        title: Option<String>,
+        /// Author name
+        #[arg(long)]
+        author: Option<String>,
+        /// Description
+        #[arg(long)]
+        description: Option<String>,
+        /// Confidence score (0.0-1.0)
+        #[arg(long)]
+        confidence: Option<f64>,
+    },
+    /// Flag item as needing metadata enrichment
+    Flag {
+        /// Item ID
+        id: String,
+    },
 }
 
 #[tokio::main]
@@ -89,6 +111,23 @@ async fn main() -> Result<()> {
             ItemsCommands::Read { ids } => items::read(&ids, cli.json).await?,
             ItemsCommands::Add { file } => items::add(&file).await?,
             ItemsCommands::Remove { ids, yes } => items::remove(&ids, yes).await?,
+            ItemsCommands::Enrich {
+                id,
+                title,
+                author,
+                description,
+                confidence,
+            } => {
+                items::enrich(
+                    &id,
+                    title.as_deref(),
+                    author.as_deref(),
+                    description.as_deref(),
+                    confidence,
+                )
+                .await?
+            }
+            ItemsCommands::Flag { id } => items::flag(&id).await?,
         },
     }
 
