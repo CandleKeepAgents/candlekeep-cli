@@ -9,7 +9,7 @@ repository = "https://github.com/CandleKeepAgents/candlekeep-cli"
 homepage = "https://www.getcandlekeep.com"
 documentation = "https://github.com/CandleKeepAgents/candlekeep-cli"
 readme = "README.md"
-keywords = ["cli", "documents", "pdf", "markdown", "library", "knowledge-base"]
+keywords = ["cli", "documents", "pdf", "library", "knowledge-base"]
 categories = ["command-line-utilities"]
 
 [[bin]]
