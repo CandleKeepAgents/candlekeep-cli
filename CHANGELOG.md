@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.1] - 2026-02-03
+
+### Added
+- **TOC Support in Enrich**: New `--toc` option for `ck items enrich` command
+  - Accepts JSON array: `--toc '[{"title":"Chapter 1","page":1,"level":1}]'`
+  - Validates TOC entries (non-empty titles, page >= 1, level >= 1)
+  - Saves TOC to item metadata for navigation
+
+### Changed
+- `ck items enrich` now requires at least one of: --title, --author, --description, or --toc
+
 ## [0.3.0] - 2026-02-03
 
 ### Added

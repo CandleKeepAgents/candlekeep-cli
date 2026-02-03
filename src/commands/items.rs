@@ -4,7 +4,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::io::{self, Write};
 use std::path::Path;
 
-use crate::api::{ApiClient, ItemReadRequest};
+use crate::api::{ApiClient, ItemReadRequest, TocEntry};
 use crate::output;
 
 /// Parse comma-separated IDs (for commands that don't use page ranges)
@@ -287,10 +287,11 @@ pub async fn enrich(
     author: Option<&str>,
     description: Option<&str>,
     confidence: Option<f64>,
+    toc_json: Option<&str>,
 ) -> Result<()> {
-    if title.is_none() && author.is_none() && description.is_none() {
+    if title.is_none() && author.is_none() && description.is_none() && toc_json.is_none() {
         return Err(anyhow::anyhow!(
-            "At least one of --title, --author, or --description is required"
+            "At least one of --title, --author, --description, or --toc is required"
         ));
     }
 
@@ -300,8 +301,34 @@ pub async fn enrich(
         }
     }
 
+    // Parse TOC JSON if provided
+    let toc: Option<Vec<TocEntry>> = match toc_json {
+        Some(json_str) => {
+            let parsed: Vec<TocEntry> = serde_json::from_str(json_str)
+                .context("Invalid TOC JSON. Expected format: [{\"title\":\"Chapter 1\",\"page\":1,\"level\":1}]")?;
+
+            // Validate TOC entries
+            for entry in &parsed {
+                if entry.title.trim().is_empty() {
+                    return Err(anyhow::anyhow!("TOC entry title cannot be empty"));
+                }
+                if entry.page < 1 {
+                    return Err(anyhow::anyhow!("TOC entry page must be >= 1"));
+                }
+                if let Some(level) = entry.level {
+                    if level < 1 {
+                        return Err(anyhow::anyhow!("TOC entry level must be >= 1"));
+                    }
+                }
+            }
+
+            Some(parsed)
+        }
+        None => None,
+    };
+
     let client = ApiClient::new()?;
-    let response = client.enrich_item(id, title, author, description, confidence).await?;
+    let response = client.enrich_item(id, title, author, description, confidence, toc.clone()).await?;
 
     output::print_success(&format!(
         "Enriched: {} (ID: {})",
@@ -320,6 +347,10 @@ pub async fn enrich(
             desc.clone()
         };
         output::print_info(&format!("Description: {}", preview));
+    }
+
+    if let Some(ref toc_entries) = toc {
+        output::print_info(&format!("TOC: {} entries added", toc_entries.len()));
     }
 
     if let Some(conf) = response.item.enrichment_confidence {

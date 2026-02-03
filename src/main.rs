@@ -71,7 +71,7 @@ enum ItemsCommands {
         #[arg(long, short)]
         yes: bool,
     },
-    /// Enrich item metadata (title, author, description)
+    /// Enrich item metadata (title, author, description, table of contents)
     Enrich {
         /// Item ID
         id: String,
@@ -87,6 +87,9 @@ enum ItemsCommands {
         /// Confidence score (0.0-1.0)
         #[arg(long)]
         confidence: Option<f64>,
+        /// Table of contents as JSON array: [{"title":"Chapter 1","page":1,"level":1}]
+        #[arg(long)]
+        toc: Option<String>,
     },
     /// Flag item as needing metadata enrichment
     Flag {
@@ -117,6 +120,7 @@ async fn main() -> Result<()> {
                 author,
                 description,
                 confidence,
+                toc,
             } => {
                 items::enrich(
                     &id,
@@ -124,6 +128,7 @@ async fn main() -> Result<()> {
                     author.as_deref(),
                     description.as_deref(),
                     confidence,
+                    toc.as_deref(),
                 )
                 .await?
             }

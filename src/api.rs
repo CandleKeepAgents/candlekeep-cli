@@ -127,7 +127,7 @@ pub struct ItemWithToc {
     pub toc: Option<Vec<TocEntry>>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TocEntry {
     pub title: String,
     pub page: i32,
@@ -491,6 +491,7 @@ impl ApiClient {
         author: Option<&str>,
         description: Option<&str>,
         confidence: Option<f64>,
+        toc: Option<Vec<TocEntry>>,
     ) -> Result<EnrichResponse> {
         #[derive(Serialize)]
         struct Body<'a> {
@@ -504,6 +505,8 @@ impl ApiClient {
             description: Option<&'a str>,
             #[serde(skip_serializing_if = "Option::is_none")]
             confidence: Option<f64>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            toc: Option<Vec<TocEntry>>,
         }
 
         let response = self
@@ -516,6 +519,7 @@ impl ApiClient {
                 author,
                 description,
                 confidence,
+                toc,
             })
             .send()
             .await
