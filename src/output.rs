@@ -5,24 +5,24 @@ use comfy_table::{presets::UTF8_FULL, Cell, Color, ContentArrangement, Table};
 
 use crate::api::{EnrichmentQueueItem, Item, ItemsResponse, ItemWithPages, ItemWithToc, TocEntry, WhoamiResponse};
 
-/// Status color mapping
+/// Status color mapping for Item.status field
 fn status_color(status: &str) -> Color {
     match status.to_uppercase().as_str() {
-        "COMPLETED" | "SUCCESS" => Color::Green,
-        "PENDING" | "QUEUED" => Color::Yellow,
-        "PROCESSING" | "RUNNING" => Color::Cyan,
-        "FAILED" | "ERROR" => Color::Red,
+        "READY" => Color::Green,
+        "DRAFT" => Color::Yellow,
+        "PROCESSING" => Color::Cyan,
+        "FAILED" => Color::Red,
         _ => Color::White,
     }
 }
 
-/// Format job status with color
+/// Format item status with color
 pub fn format_status(status: &str) -> String {
     match status.to_uppercase().as_str() {
-        "COMPLETED" | "SUCCESS" => status.green().to_string(),
-        "PENDING" | "QUEUED" => status.yellow().to_string(),
-        "PROCESSING" | "RUNNING" => status.cyan().to_string(),
-        "FAILED" | "ERROR" => status.red().to_string(),
+        "READY" => status.green().to_string(),
+        "DRAFT" => status.yellow().to_string(),
+        "PROCESSING" => status.cyan().to_string(),
+        "FAILED" => status.red().to_string(),
         _ => status.to_string(),
     }
 }
@@ -73,13 +73,8 @@ pub fn print_items_table(items: &[Item], enrichment_queue: &Option<Vec<Enrichmen
         ]);
 
     for item in items {
-        let status = item
-            .latest_job
-            .as_ref()
-            .map(|j| j.status.clone())
-            .unwrap_or_else(|| "N/A".to_string());
-
-        let status_cell = Cell::new(&status).fg(status_color(&status));
+        let status = &item.status;
+        let status_cell = Cell::new(status).fg(status_color(status));
 
         let enrich_status = if item.needs_enrichment.unwrap_or(false) {
             Cell::new("⚠").fg(Color::Yellow)

@@ -62,8 +62,7 @@ pub struct Item {
     pub updated_at: String,
     #[serde(rename = "pageCount")]
     pub page_count: i32,
-    #[serde(rename = "latestJob")]
-    pub latest_job: Option<Job>,
+    pub status: String,  // "DRAFT" | "PROCESSING" | "READY" | "FAILED"
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -98,8 +97,7 @@ pub struct ItemWithPages {
     #[serde(rename = "pageCount")]
     pub page_count: i32,
     pub pages: Vec<Page>,
-    #[serde(rename = "latestJob")]
-    pub latest_job: Option<Job>,
+    pub status: String,  // "DRAFT" | "PROCESSING" | "READY" | "FAILED"
 }
 
 #[derive(Debug, Deserialize, Serialize)]
