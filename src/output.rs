@@ -3,7 +3,7 @@
 use colored::Colorize;
 use comfy_table::{presets::UTF8_FULL, Cell, Color, ContentArrangement, Table};
 
-use crate::api::{EnrichmentQueueItem, Item, ItemsResponse, ItemWithPages, ItemWithToc, TocEntry, WhoamiResponse};
+use crate::api::{EnrichmentQueueItem, Item, ItemsResponse, ItemWithPages, ItemWithToc, Source, SourcesResponse, TocEntry, WhoamiResponse};
 
 /// Status color mapping for Item.status field
 fn status_color(status: &str) -> Color {
@@ -261,4 +261,63 @@ pub fn print_warning(message: &str) {
 /// Print info message
 pub fn print_info(message: &str) {
     println!("{} {}", "i".cyan().bold(), message);
+}
+
+/// Print sources as table
+pub fn print_sources_table(sources: &[Source], total: i64) {
+    if sources.is_empty() {
+        println!("{}", "No sources found.".dimmed());
+        return;
+    }
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_header(vec![
+            Cell::new("ID").fg(Color::Cyan),
+            Cell::new("Author").fg(Color::Cyan),
+            Cell::new("Content").fg(Color::Cyan),
+            Cell::new("URL").fg(Color::Cyan),
+            Cell::new("Date").fg(Color::Cyan),
+        ]);
+
+    for source in sources {
+        let author = source
+            .author_handle
+            .as_deref()
+            .or(source.author_name.as_deref())
+            .unwrap_or("-");
+
+        let content = match &source.content {
+            Some(c) if c.len() > 50 => format!("{}...", &c[..47]),
+            Some(c) => c.clone(),
+            None => "-".to_string(),
+        };
+
+        let url = source.source_url.as_deref().unwrap_or("-");
+
+        let date = &source.created_at[..10]; // YYYY-MM-DD
+
+        table.add_row(vec![
+            Cell::new(&source.id),
+            Cell::new(author),
+            Cell::new(&content),
+            Cell::new(url),
+            Cell::new(date),
+        ]);
+    }
+
+    println!("{table}");
+    println!(
+        "\n{} {} (showing {})",
+        total.to_string().bold(),
+        if total == 1 { "source" } else { "sources" },
+        sources.len()
+    );
+}
+
+/// Print sources as JSON
+pub fn print_sources_json(response: &SourcesResponse) {
+    println!("{}", serde_json::to_string_pretty(response).unwrap());
 }

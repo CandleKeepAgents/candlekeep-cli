@@ -5,7 +5,7 @@ mod output;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use commands::{auth, items};
+use commands::{auth, items, sources};
 
 #[derive(Parser)]
 #[command(name = "ck")]
@@ -31,6 +31,11 @@ enum Commands {
     Items {
         #[command(subcommand)]
         command: ItemsCommands,
+    },
+    /// Source management commands
+    Sources {
+        #[command(subcommand)]
+        command: SourcesCommands,
     },
 }
 
@@ -122,6 +127,24 @@ enum ItemsCommands {
     },
 }
 
+#[derive(Subcommand)]
+enum SourcesCommands {
+    /// List saved sources
+    List {
+        /// Maximum number of sources to return
+        #[arg(long)]
+        limit: Option<u32>,
+    },
+    /// Delete sources
+    Delete {
+        /// Comma-separated source IDs
+        ids: String,
+        /// Skip confirmation prompt
+        #[arg(long, short)]
+        yes: bool,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -166,6 +189,10 @@ async fn main() -> Result<()> {
             }
             ItemsCommands::Get { id } => items::get(&id).await?,
             ItemsCommands::Put { id, file } => items::put(&id, file.as_deref()).await?,
+        },
+        Commands::Sources { command } => match command {
+            SourcesCommands::List { limit } => sources::list(cli.json, limit).await?,
+            SourcesCommands::Delete { ids, yes } => sources::delete(&ids, yes).await?,
         },
     }
 

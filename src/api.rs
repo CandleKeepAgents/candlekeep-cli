@@ -251,6 +251,50 @@ pub struct PutContentResponse {
     pub updated_at: String,
 }
 
+// Source types
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Source {
+    pub id: String,
+    #[serde(rename = "sourceType")]
+    pub source_type: String,
+    #[serde(rename = "sourceUrl")]
+    pub source_url: Option<String>,
+    pub content: Option<String>,
+    #[serde(rename = "authorName")]
+    pub author_name: Option<String>,
+    #[serde(rename = "authorHandle")]
+    pub author_handle: Option<String>,
+    #[serde(rename = "authorAvatarUrl")]
+    pub author_avatar_url: Option<String>,
+    #[serde(rename = "publishedAt")]
+    pub published_at: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+    #[serde(rename = "needsEnrichment")]
+    pub needs_enrichment: Option<bool>,
+    #[serde(rename = "enrichedAt")]
+    pub enriched_at: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SourcesResponse {
+    pub sources: Vec<Source>,
+    #[serde(rename = "nextCursor")]
+    pub next_cursor: Option<String>,
+    pub total: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SourceDeleteResponse {
+    pub deleted: Vec<String>,
+    #[serde(rename = "notFound")]
+    pub not_found: Vec<String>,
+}
+
 /// Request type for reading items with optional per-item page ranges
 #[derive(Debug, Serialize)]
 pub struct ItemReadRequest {
@@ -672,6 +716,57 @@ impl ApiClient {
             .put(self.api_url(&format!("/items/{}/content", item_id)))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&Body { content })
+            .send()
+            .await
+            .context("Failed to connect to API")?;
+
+        if !response.status().is_success() {
+            return Err(Self::handle_error(response).await);
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse response")
+    }
+
+    /// GET /api/v1/sources - List sources
+    pub async fn list_sources(&self, limit: u32, cursor: Option<&str>) -> Result<SourcesResponse> {
+        let mut url = format!("{}?limit={}", self.api_url("/sources"), limit);
+        if let Some(c) = cursor {
+            url.push_str(&format!("&cursor={}", c));
+        }
+
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .send()
+            .await
+            .context("Failed to connect to API")?;
+
+        if !response.status().is_success() {
+            return Err(Self::handle_error(response).await);
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse response")
+    }
+
+    /// DELETE /api/v1/sources - Delete multiple sources
+    pub async fn delete_sources(&self, ids: Vec<String>) -> Result<SourceDeleteResponse> {
+        #[derive(Serialize)]
+        struct Body {
+            ids: Vec<String>,
+        }
+
+        let response = self
+            .client
+            .delete(self.api_url("/sources"))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .json(&Body { ids })
             .send()
             .await
             .context("Failed to connect to API")?;
