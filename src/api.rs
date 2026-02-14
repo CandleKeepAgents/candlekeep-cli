@@ -11,6 +11,7 @@ pub struct ApiClient {
     client: Client,
     base_url: String,
     api_key: String,
+    session: Option<String>,
 }
 
 // Response types
@@ -295,6 +296,23 @@ pub struct SourceDeleteResponse {
     pub not_found: Vec<String>,
 }
 
+// Session types
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SessionResponse {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SessionCompleteResponse {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    pub status: String,
+}
+
 /// Request type for reading items with optional per-item page ranges
 #[derive(Debug, Serialize)]
 pub struct ItemReadRequest {
@@ -305,10 +323,19 @@ pub struct ItemReadRequest {
 
 impl ApiClient {
     /// Create a new API client with the configured API key
-    pub fn new() -> Result<Self> {
+    pub fn new(session: Option<String>, no_session: bool) -> Result<Self> {
         let api_key = config::get_api_key()?
             .context("Not authenticated. Run 'ck auth login' first.")?;
         let base_url = config::get_api_url()?;
+
+        // Resolve session: --no-session > --session flag > file > none
+        let resolved_session = if no_session {
+            None
+        } else if let Some(s) = session {
+            Some(s)
+        } else {
+            Self::read_session_file()
+        };
 
         let client = Client::builder()
             .user_agent(format!("ck-cli/{}", env!("CARGO_PKG_VERSION")))
@@ -319,12 +346,21 @@ impl ApiClient {
             client,
             base_url,
             api_key,
+            session: resolved_session,
         })
     }
 
     /// Create a new API client with a specific API key (for validation)
-    pub fn with_key(api_key: &str) -> Result<Self> {
+    pub fn with_key(api_key: &str, session: Option<String>, no_session: bool) -> Result<Self> {
         let base_url = config::get_api_url()?;
+
+        let resolved_session = if no_session {
+            None
+        } else if let Some(s) = session {
+            Some(s)
+        } else {
+            Self::read_session_file()
+        };
 
         let client = Client::builder()
             .user_agent(format!("ck-cli/{}", env!("CARGO_PKG_VERSION")))
@@ -335,11 +371,53 @@ impl ApiClient {
             client,
             base_url,
             api_key: api_key.to_string(),
+            session: resolved_session,
         })
     }
 
     fn api_url(&self, path: &str) -> String {
         format!("{}/api/v1{}", self.base_url, path)
+    }
+
+    /// Build a request with auth and optional session headers
+    fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
+        let url = self.api_url(path);
+        let mut builder = self
+            .client
+            .request(method, &url)
+            .header("Authorization", format!("Bearer {}", self.api_key));
+
+        if let Some(ref session) = self.session {
+            builder = builder.header("X-CK-Session", session.as_str());
+        }
+
+        builder
+    }
+
+    /// Read session ID from ~/.candlekeep/session file
+    pub fn read_session_file() -> Option<String> {
+        let path = dirs::home_dir()?.join(".candlekeep").join("session");
+        std::fs::read_to_string(&path)
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
+    /// Write session ID to ~/.candlekeep/session file
+    pub fn write_session_file(session_id: &str) -> Result<()> {
+        let dir = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("No home directory"))?
+            .join(".candlekeep");
+        std::fs::create_dir_all(&dir)?;
+        std::fs::write(dir.join("session"), session_id)?;
+        Ok(())
+    }
+
+    /// Delete ~/.candlekeep/session file
+    pub fn delete_session_file() {
+        if let Some(path) = dirs::home_dir().map(|h| h.join(".candlekeep").join("session")) {
+            let _ = std::fs::remove_file(path);
+        }
     }
 
     /// Handle API error responses
@@ -363,9 +441,7 @@ impl ApiClient {
     /// GET /api/v1/auth/whoami
     pub async fn whoami(&self) -> Result<WhoamiResponse> {
         let response = self
-            .client
-            .get(self.api_url("/auth/whoami"))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::GET, "/auth/whoami")
             .send()
             .await
             .context("Failed to connect to API")?;
@@ -383,9 +459,7 @@ impl ApiClient {
     /// GET /api/v1/items
     pub async fn list_items(&self) -> Result<ItemsResponse> {
         let response = self
-            .client
-            .get(self.api_url("/items"))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::GET, "/items")
             .send()
             .await
             .context("Failed to connect to API")?;
@@ -409,9 +483,7 @@ impl ApiClient {
         }
 
         let response = self
-            .client
-            .post(self.api_url("/items/batch"))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::POST, "/items/batch")
             .json(&Body { items })
             .send()
             .await
@@ -435,9 +507,7 @@ impl ApiClient {
         }
 
         let response = self
-            .client
-            .post(self.api_url("/items/batch/toc"))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::POST, "/items/batch/toc")
             .json(&Body { ids })
             .send()
             .await
@@ -469,9 +539,7 @@ impl ApiClient {
         }
 
         let response = self
-            .client
-            .post(self.api_url("/upload"))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::POST, "/upload")
             .json(&Body {
                 filename,
                 size,
@@ -522,9 +590,7 @@ impl ApiClient {
         }
 
         let response = self
-            .client
-            .post(self.api_url("/upload/confirm"))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::POST, "/upload/confirm")
             .json(&Body { item_id, storage_key })
             .send()
             .await
@@ -548,9 +614,7 @@ impl ApiClient {
         }
 
         let response = self
-            .client
-            .delete(self.api_url("/items"))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::DELETE, "/items")
             .json(&Body { ids })
             .send()
             .await
@@ -593,9 +657,7 @@ impl ApiClient {
         }
 
         let response = self
-            .client
-            .patch(self.api_url("/items/enrich"))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::PATCH, "/items/enrich")
             .json(&Body {
                 item_id,
                 title,
@@ -627,9 +689,7 @@ impl ApiClient {
         }
 
         let response = self
-            .client
-            .post(self.api_url("/items/flag"))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::POST, "/items/flag")
             .json(&Body { item_id })
             .send()
             .await
@@ -662,9 +722,7 @@ impl ApiClient {
         }
 
         let response = self
-            .client
-            .post(self.api_url("/items/markdown"))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::POST, "/items/markdown")
             .json(&Body {
                 title,
                 description,
@@ -687,9 +745,7 @@ impl ApiClient {
     /// GET /api/v1/items/:id/content - Get full document content
     pub async fn get_content(&self, item_id: &str) -> Result<GetContentResponse> {
         let response = self
-            .client
-            .get(self.api_url(&format!("/items/{}/content", item_id)))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::GET, &format!("/items/{}/content", item_id))
             .send()
             .await
             .context("Failed to connect to API")?;
@@ -712,9 +768,7 @@ impl ApiClient {
         }
 
         let response = self
-            .client
-            .put(self.api_url(&format!("/items/{}/content", item_id)))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::PUT, &format!("/items/{}/content", item_id))
             .json(&Body { content })
             .send()
             .await
@@ -732,15 +786,13 @@ impl ApiClient {
 
     /// GET /api/v1/sources - List sources
     pub async fn list_sources(&self, limit: u32, cursor: Option<&str>) -> Result<SourcesResponse> {
-        let mut url = format!("{}?limit={}", self.api_url("/sources"), limit);
+        let mut path = format!("/sources?limit={}", limit);
         if let Some(c) = cursor {
-            url.push_str(&format!("&cursor={}", c));
+            path.push_str(&format!("&cursor={}", c));
         }
 
         let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::GET, &path)
             .send()
             .await
             .context("Failed to connect to API")?;
@@ -763,10 +815,58 @@ impl ApiClient {
         }
 
         let response = self
-            .client
-            .delete(self.api_url("/sources"))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .request(reqwest::Method::DELETE, "/sources")
             .json(&Body { ids })
+            .send()
+            .await
+            .context("Failed to connect to API")?;
+
+        if !response.status().is_success() {
+            return Err(Self::handle_error(response).await);
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse response")
+    }
+
+    /// POST /api/v1/access/session - Create a new access session
+    pub async fn create_session(&self, intent: Option<&str>) -> Result<SessionResponse> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            intent: Option<&'a str>,
+        }
+
+        let response = self
+            .request(reqwest::Method::POST, "/access/session")
+            .json(&Body { intent })
+            .send()
+            .await
+            .context("Failed to connect to API")?;
+
+        if !response.status().is_success() {
+            return Err(Self::handle_error(response).await);
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse response")
+    }
+
+    /// POST /api/v1/access/session/complete - Complete an access session
+    pub async fn complete_session(&self, session_id: &str) -> Result<SessionCompleteResponse> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            #[serde(rename = "sessionId")]
+            session_id: &'a str,
+        }
+
+        let response = self
+            .request(reqwest::Method::POST, "/access/session/complete")
+            .json(&Body { session_id })
             .send()
             .await
             .context("Failed to connect to API")?;

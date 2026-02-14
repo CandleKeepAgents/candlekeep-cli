@@ -75,8 +75,8 @@ fn parse_ids_with_ranges(ids_str: &str) -> Result<Vec<ItemReadRequest>> {
 }
 
 /// List all items
-pub async fn list(json: bool) -> Result<()> {
-    let client = ApiClient::new()?;
+pub async fn list(json: bool, session: Option<String>, no_session: bool) -> Result<()> {
+    let client = ApiClient::new(session, no_session)?;
     let response = client.list_items().await?;
 
     if json {
@@ -90,10 +90,10 @@ pub async fn list(json: bool) -> Result<()> {
 
 /// Read content from items
 /// Format: "id1:1-5,id2:all,id3:10-20"
-pub async fn read(ids_str: &str, json: bool) -> Result<()> {
+pub async fn read(ids_str: &str, json: bool, session: Option<String>, no_session: bool) -> Result<()> {
     let items = parse_ids_with_ranges(ids_str)?;
 
-    let client = ApiClient::new()?;
+    let client = ApiClient::new(session, no_session)?;
     let response = client.batch_read(items).await?;
 
     if json {
@@ -106,13 +106,13 @@ pub async fn read(ids_str: &str, json: bool) -> Result<()> {
 }
 
 /// Show table of contents for items
-pub async fn toc(ids_str: &str, json: bool) -> Result<()> {
+pub async fn toc(ids_str: &str, json: bool, session: Option<String>, no_session: bool) -> Result<()> {
     let ids = parse_ids(ids_str);
     if ids.is_empty() {
         return Err(anyhow::anyhow!("No item IDs provided"));
     }
 
-    let client = ApiClient::new()?;
+    let client = ApiClient::new(session, no_session)?;
     let response = client.batch_toc(ids).await?;
 
     if json {
@@ -125,7 +125,7 @@ pub async fn toc(ids_str: &str, json: bool) -> Result<()> {
 }
 
 /// Upload a file (PDF or Markdown)
-pub async fn add(file_path: &str) -> Result<()> {
+pub async fn add(file_path: &str, session: Option<String>, no_session: bool) -> Result<()> {
     let path = Path::new(file_path);
 
     // Validate file exists
@@ -162,7 +162,7 @@ pub async fn add(file_path: &str) -> Result<()> {
     println!("{}", format!("Uploading: {}", filename).cyan());
     println!("{}", format!("Size: {} bytes", size).dimmed());
 
-    let client = ApiClient::new()?;
+    let client = ApiClient::new(session, no_session)?;
 
     // Step 1: Get presigned upload URL
     print!("{}", "Creating upload...".dimmed());
@@ -222,7 +222,7 @@ pub async fn add(file_path: &str) -> Result<()> {
 }
 
 /// Remove items
-pub async fn remove(ids_str: &str, skip_confirm: bool) -> Result<()> {
+pub async fn remove(ids_str: &str, skip_confirm: bool, session: Option<String>, no_session: bool) -> Result<()> {
     let ids = parse_ids(ids_str);
     if ids.is_empty() {
         return Err(anyhow::anyhow!("No item IDs provided"));
@@ -249,7 +249,7 @@ pub async fn remove(ids_str: &str, skip_confirm: bool) -> Result<()> {
         }
     }
 
-    let client = ApiClient::new()?;
+    let client = ApiClient::new(session, no_session)?;
     let response = client.delete_items(ids).await?;
 
     // Report results
@@ -288,6 +288,8 @@ pub async fn enrich(
     description: Option<&str>,
     confidence: Option<f64>,
     toc_json: Option<&str>,
+    session: Option<String>,
+    no_session: bool,
 ) -> Result<()> {
     if title.is_none() && author.is_none() && description.is_none() && toc_json.is_none() {
         return Err(anyhow::anyhow!(
@@ -327,7 +329,7 @@ pub async fn enrich(
         None => None,
     };
 
-    let client = ApiClient::new()?;
+    let client = ApiClient::new(session, no_session)?;
     let response = client.enrich_item(id, title, author, description, confidence, toc.clone()).await?;
 
     output::print_success(&format!(
@@ -365,8 +367,8 @@ pub async fn enrich(
 }
 
 /// Flag item as needing enrichment
-pub async fn flag(id: &str) -> Result<()> {
-    let client = ApiClient::new()?;
+pub async fn flag(id: &str, session: Option<String>, no_session: bool) -> Result<()> {
+    let client = ApiClient::new(session, no_session)?;
     let response = client.flag_item(id).await?;
 
     output::print_success(&format!(
@@ -384,8 +386,10 @@ pub async fn create(
     description: Option<&str>,
     content: Option<&str>,
     json: bool,
+    session: Option<String>,
+    no_session: bool,
 ) -> Result<()> {
-    let client = ApiClient::new()?;
+    let client = ApiClient::new(session, no_session)?;
     let response = client.create_markdown(title, description, content).await?;
 
     if json {
@@ -406,8 +410,8 @@ pub async fn create(
 }
 
 /// Get full content of a document (outputs to stdout for piping)
-pub async fn get(id: &str) -> Result<()> {
-    let client = ApiClient::new()?;
+pub async fn get(id: &str, session: Option<String>, no_session: bool) -> Result<()> {
+    let client = ApiClient::new(session, no_session)?;
     let response = client.get_content(id).await?;
 
     // Output raw content to stdout (for piping to files)
@@ -417,7 +421,7 @@ pub async fn get(id: &str) -> Result<()> {
 }
 
 /// Replace document content from file or stdin
-pub async fn put(id: &str, file_path: Option<&str>) -> Result<()> {
+pub async fn put(id: &str, file_path: Option<&str>, session: Option<String>, no_session: bool) -> Result<()> {
     let content = if let Some(path) = file_path {
         // Read from file
         let path = Path::new(path);
@@ -448,7 +452,7 @@ pub async fn put(id: &str, file_path: Option<&str>) -> Result<()> {
         return Err(anyhow::anyhow!("No content provided"));
     }
 
-    let client = ApiClient::new()?;
+    let client = ApiClient::new(session, no_session)?;
     let response = client.put_content(id, &content).await?;
 
     output::print_success(&format!(

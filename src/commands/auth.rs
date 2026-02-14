@@ -8,7 +8,8 @@ use crate::config;
 use crate::output;
 
 /// Login via browser authentication
-pub async fn login() -> Result<()> {
+pub async fn login(session: Option<String>, no_session: bool) -> Result<()> {
+    let _ = (&session, no_session); // session not needed for login flow itself
     // Check if already authenticated
     if config::is_authenticated() {
         output::print_warning("Already logged in. Use 'ck auth logout' first to re-authenticate.");
@@ -139,8 +140,8 @@ async fn validate_and_save_key(api_key: &str) -> Result<()> {
     print!("{}", "Validating API key...".dimmed());
     io::stdout().flush()?;
 
-    // Validate the key by calling whoami
-    let client = ApiClient::with_key(api_key)?;
+    // Validate the key by calling whoami (no session needed for validation)
+    let client = ApiClient::with_key(api_key, None, true)?;
     let user = client.whoami().await.context("Invalid API key")?;
 
     println!(" {}", "OK".green());
@@ -170,8 +171,8 @@ pub fn logout() -> Result<()> {
 }
 
 /// Show current user information
-pub async fn whoami(json: bool) -> Result<()> {
-    let client = ApiClient::new()?;
+pub async fn whoami(json: bool, session: Option<String>, no_session: bool) -> Result<()> {
+    let client = ApiClient::new(session, no_session)?;
     let user = client.whoami().await?;
 
     if json {

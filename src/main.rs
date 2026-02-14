@@ -5,7 +5,7 @@ mod output;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use commands::{auth, items, sources};
+use commands::{access, auth, items, sources};
 
 #[derive(Parser)]
 #[command(name = "ck")]
@@ -18,6 +18,14 @@ struct Cli {
     /// Output in JSON format
     #[arg(long, global = true)]
     json: bool,
+
+    /// Use specific session ID (hidden, used by agents)
+    #[arg(long, global = true, hide = true)]
+    session: Option<String>,
+
+    /// Disable session tracking (hidden, used by book-enricher)
+    #[arg(long, global = true, hide = true)]
+    no_session: bool,
 }
 
 #[derive(Subcommand)]
@@ -36,6 +44,12 @@ enum Commands {
     Sources {
         #[command(subcommand)]
         command: SourcesCommands,
+    },
+    /// Access session tracking (hidden, used by agents)
+    #[command(hide = true)]
+    Access {
+        #[command(subcommand)]
+        command: AccessCommands,
     },
 }
 
@@ -145,22 +159,34 @@ enum SourcesCommands {
     },
 }
 
+#[derive(Subcommand)]
+enum AccessCommands {
+    /// Start a new research session
+    Start {
+        /// Research intent/question
+        #[arg(long)]
+        intent: Option<String>,
+    },
+    /// Complete the current research session
+    Complete,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Auth { command } => match command {
-            AuthCommands::Login => auth::login().await?,
+            AuthCommands::Login => auth::login(cli.session.clone(), cli.no_session).await?,
             AuthCommands::Logout => auth::logout()?,
-            AuthCommands::Whoami => auth::whoami(cli.json).await?,
+            AuthCommands::Whoami => auth::whoami(cli.json, cli.session.clone(), cli.no_session).await?,
         },
         Commands::Items { command } => match command {
-            ItemsCommands::List => items::list(cli.json).await?,
-            ItemsCommands::Toc { ids } => items::toc(&ids, cli.json).await?,
-            ItemsCommands::Read { ids } => items::read(&ids, cli.json).await?,
-            ItemsCommands::Add { file } => items::add(&file).await?,
-            ItemsCommands::Remove { ids, yes } => items::remove(&ids, yes).await?,
+            ItemsCommands::List => items::list(cli.json, cli.session.clone(), cli.no_session).await?,
+            ItemsCommands::Toc { ids } => items::toc(&ids, cli.json, cli.session.clone(), cli.no_session).await?,
+            ItemsCommands::Read { ids } => items::read(&ids, cli.json, cli.session.clone(), cli.no_session).await?,
+            ItemsCommands::Add { file } => items::add(&file, cli.session.clone(), cli.no_session).await?,
+            ItemsCommands::Remove { ids, yes } => items::remove(&ids, yes, cli.session.clone(), cli.no_session).await?,
             ItemsCommands::Enrich {
                 id,
                 title,
@@ -176,23 +202,33 @@ async fn main() -> Result<()> {
                     description.as_deref(),
                     confidence,
                     toc.as_deref(),
+                    cli.session.clone(),
+                    cli.no_session,
                 )
                 .await?
             }
-            ItemsCommands::Flag { id } => items::flag(&id).await?,
+            ItemsCommands::Flag { id } => items::flag(&id, cli.session.clone(), cli.no_session).await?,
             ItemsCommands::Create {
                 title,
                 description,
                 content,
             } => {
-                items::create(&title, description.as_deref(), content.as_deref(), cli.json).await?
+                items::create(&title, description.as_deref(), content.as_deref(), cli.json, cli.session.clone(), cli.no_session).await?
             }
-            ItemsCommands::Get { id } => items::get(&id).await?,
-            ItemsCommands::Put { id, file } => items::put(&id, file.as_deref()).await?,
+            ItemsCommands::Get { id } => items::get(&id, cli.session.clone(), cli.no_session).await?,
+            ItemsCommands::Put { id, file } => items::put(&id, file.as_deref(), cli.session.clone(), cli.no_session).await?,
         },
         Commands::Sources { command } => match command {
-            SourcesCommands::List { limit } => sources::list(cli.json, limit).await?,
-            SourcesCommands::Delete { ids, yes } => sources::delete(&ids, yes).await?,
+            SourcesCommands::List { limit } => sources::list(cli.json, limit, cli.session.clone(), cli.no_session).await?,
+            SourcesCommands::Delete { ids, yes } => sources::delete(&ids, yes, cli.session.clone(), cli.no_session).await?,
+        },
+        Commands::Access { command } => match command {
+            AccessCommands::Start { intent } => {
+                access::start(intent.as_deref(), cli.json, cli.session.clone(), cli.no_session).await?
+            }
+            AccessCommands::Complete => {
+                access::complete(cli.json, cli.session.clone(), cli.no_session).await?
+            }
         },
     }
 

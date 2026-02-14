@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.6.0] - 2026-02-14
+
+### Added
+- **Access Session Tracking**: Research session management for analytics
+  - `ck access start` - Start a new research session with optional `--intent`
+  - `ck access complete` - Complete the current research session
+  - Global `--session <id>` flag to attach commands to an existing session
+  - Global `--no-session` flag to disable session tracking (used by book-enricher)
+- All item commands (`list`, `toc`, `read`, `add`, `remove`) now pass session context to API for access logging
+
+### Changed
+- API client refactored to support session headers on all requests
+- Auth commands updated to pass session context
+
+## [0.5.0] - 2026-02-14
+
+### Added
+- **Sources Management**: Commands for managing content sources
+  - `ck sources list` - List saved sources (tweets, etc.)
+  - `ck sources delete <id>` - Delete a source by ID
+- Item list now uses `status` field instead of latest job lookup
+
 ## [0.4.0] - 2026-02-04
 
 ### Added

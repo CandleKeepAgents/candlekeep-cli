@@ -15,8 +15,8 @@ fn parse_ids(ids_str: &str) -> Vec<String> {
 }
 
 /// List sources
-pub async fn list(json: bool, limit: Option<u32>) -> Result<()> {
-    let client = ApiClient::new()?;
+pub async fn list(json: bool, limit: Option<u32>, session: Option<String>, no_session: bool) -> Result<()> {
+    let client = ApiClient::new(session, no_session)?;
     let limit = limit.unwrap_or(50);
     let response = client.list_sources(limit, None).await?;
 
@@ -30,7 +30,7 @@ pub async fn list(json: bool, limit: Option<u32>) -> Result<()> {
 }
 
 /// Delete sources
-pub async fn delete(ids_str: &str, skip_confirm: bool) -> Result<()> {
+pub async fn delete(ids_str: &str, skip_confirm: bool, session: Option<String>, no_session: bool) -> Result<()> {
     let ids = parse_ids(ids_str);
     if ids.is_empty() {
         return Err(anyhow::anyhow!("No source IDs provided"));
@@ -57,7 +57,7 @@ pub async fn delete(ids_str: &str, skip_confirm: bool) -> Result<()> {
         }
     }
 
-    let client = ApiClient::new()?;
+    let client = ApiClient::new(session, no_session)?;
     let response = client.delete_sources(ids).await?;
 
     // Report results
